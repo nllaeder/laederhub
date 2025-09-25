@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser, useAuth } from '@/firebase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,18 +12,20 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DatabaseZap, LogOut, User as UserIcon } from 'lucide-react';
+import { DatabaseZap, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { signOut } from 'firebase/auth';
 
 export function HubHeader() {
-  const { user, signOutUser } = useAuth();
+  const { user } = useUser();
+  const auth = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
   const handleSignOut = async () => {
     try {
-      await signOutUser();
+      await signOut(auth);
       toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
       router.push('/');
     } catch (error: any) {

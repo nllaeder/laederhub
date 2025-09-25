@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { useUser, useAuth } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -34,7 +35,8 @@ const formSchema = z.object({
 
 export default function SignupPage() {
   const router = useRouter();
-  const { user, signUpWithEmail, signInWithGoogle } = useAuth();
+  const { user } = useUser();
+  const auth = useAuth();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -53,7 +55,7 @@ export default function SignupPage() {
   
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      await signUpWithEmail(values.email, values.password);
+      await createUserWithEmailAndPassword(auth, values.email, values.password);
       toast({ title: 'Success', description: 'Account created successfully.' });
       router.push('/hub');
     } catch (error: any) {
@@ -67,7 +69,8 @@ export default function SignupPage() {
   
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithGoogle();
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
       toast({ title: 'Success', description: 'Logged in successfully.' });
       router.push('/hub');
     } catch (error: any) {
