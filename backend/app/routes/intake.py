@@ -5,10 +5,10 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ..core.security import CurrentUser
-from ..llm import orchestrator
-from ..store import firestore
-from ..store.models import UserProfile
+from ..services.core.security import CurrentUser
+from ..services.llm import orchestrator
+from ..services.store import firestore
+from ..services.store.models import UserProfile
 
 router = APIRouter()
 

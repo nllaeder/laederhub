@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from . import prompts
+from prompts import prompts
 
 
 def chat_intake(message: str, context: dict[str, Any] | None = None, user: dict | None = None) -> dict[str, Any]:

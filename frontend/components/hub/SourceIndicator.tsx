@@ -1,4 +1,4 @@
-import type { Source } from '@/types';
+import type { Source } from '@shared/schemas';
 import { CheckCircle2, Clock3, XCircle, Database, Mail, BarChart2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

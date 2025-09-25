@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from .core.config import settings
-from .core.logging import configure_logging
+from .services.core.config import settings
+from .services.core.logging import configure_logging
 from .routers import analytics, auth, connects, intake
 
 configure_logging()

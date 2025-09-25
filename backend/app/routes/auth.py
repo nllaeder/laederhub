@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from ..core.security import CurrentUser
+from ..services.core.security import CurrentUser
 
 router = APIRouter()
 

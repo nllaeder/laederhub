@@ -6,12 +6,12 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ..core.config import settings
-from ..core.security import CurrentUser
-from ..data import loaders
-from ..mcp import client as mcp_client
-from ..store import firestore
-from ..store.models import IngestionRun
+from ..services.core.config import settings
+from ..services.core.security import CurrentUser
+from ..services.data import loaders
+from ..services.mcp import client as mcp_client
+from ..services.store import firestore
+from ..services.store.models import IngestionRun
 
 router = APIRouter()
 

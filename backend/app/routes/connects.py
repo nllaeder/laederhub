@@ -5,10 +5,10 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ..core.security import CurrentUser
-from ..mcp import client as mcp_client
-from ..store import firestore
-from ..store.models import ConnectionRecord
+from ..services.core.security import CurrentUser
+from ..services.mcp import client as mcp_client
+from ..services.store import firestore
+from ..services.store.models import ConnectionRecord
 
 router = APIRouter()
 
