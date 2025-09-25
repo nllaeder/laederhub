@@ -1,95 +1,75 @@
-<<<<<<< HEAD
-# LaederHub
+# LaederHub Monorepo
 
-This is a Next.js project for LaederHub, built with Firebase and FastAPI.
+LaederHub combines a Next.js front-end experience with a FastAPI backend to power LaederData's landing page and analytics hub. The repository houses everything needed to market the product at `laederdata.com` and run the authenticated chat interface at `hub.laederdata.com`.
 
-It includes:
-1.  A **static landing page**.
-2.  An **auth-protected hub application** with a chat interface.
+## What’s Inside
+- **Landing site (`src/app/page.tsx`)** &mdash; Public marketing experience with hero, services, and contact sections.
+- **Hub app (`src/app/hub/*`)** &mdash; Auth-protected workspace with a chat interface, source status bar, and Firebase-gated layout.
+- **FastAPI service (`services/api`)** &mdash; Verifies Firebase ID tokens, orchestrates intake conversations, simulates MCP connectors, and stubs analytics ingestion to GCS + BigQuery.
+- **Shared docs (`docs/`, `TASKS.md`)** &mdash; Product blueprint, backend schemas, and prioritized implementation checklist.
 
-## Getting Started
+## Repository Structure
+```
+.
+├── src/                # Next.js application (landing + hub + shared UI)
+├── services/api/       # FastAPI backend, routers, data loaders, MCP stubs
+├── docs/               # Product and backend blueprints
+├── scripts/            # Helper scripts for local development
+├── tests/              # Pytest suites (unit + future integration)
+├── package.json        # Front-end dependencies and scripts
+└── pyproject.toml      # Backend (Poetry) configuration
+```
 
-### 1. Prerequisites
+## Prerequisites
+- Node.js 18+
+- npm (ships with Node) or your preferred package manager
+- Python 3.11+
+- Poetry (recommended) or another virtual environment manager
+- Firebase CLI for hosting deployments (optional during development)
 
-- [Node.js](https://nodejs.org/) (v18 or later)
-- `pnpm` package manager (`npm install -g pnpm`)
-- [Firebase CLI](https://firebase.google.com/docs/cli) (`npm install -g firebase-tools`)
+## Front-End Development
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
+   The app serves on [http://localhost:9002](http://localhost:9002).
+3. Configure Firebase client settings by updating `src/firebase/config.ts` for local work. In production, Firebase App Hosting injects credentials automatically.
 
-### 2. Firebase Setup
+## Domain Routing
+- Host-based rewrites in `src/middleware.ts` map `hub.laederdata.com` traffic to the `/hub` route while leaving the public marketing site at `/`.
+- For local testing, add an entry such as `127.0.0.1 hub.localhost` to `/etc/hosts` (or Windows equivalent) and browse to `http://hub.localhost:9002` to exercise the hub experience without changing paths manually.
+- Adjust the host allowlist in `src/middleware.ts` if additional subdomains or environments need to point directly at the hub UI.
 
-1.  Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/).
-2.  Enable **Firebase Authentication** with "Google" and "Email/Password" sign-in providers.
-3.  Enable **Firebase Hosting**.
-4.  From your project's settings, get your Firebase configuration object. It will look like this:
-    ```javascript
-    const firebaseConfig = {
-      apiKey: "AIza...",
-      authDomain: "your-project-id.firebaseapp.com",
-      projectId: "your-project-id",
-      storageBucket: "your-project-id.appspot.com",
-      messagingSenderId: "...",
-      appId: "...",
-    };
-    ```
-5.  Copy this configuration into `src/lib/firebase.ts`, replacing the placeholder values.
-
-### 3. Local Development
-
-1.  **Install dependencies:**
-    ```bash
-    pnpm install
-    ```
-
-2.  **Run the development server:**
-    ```bash
-    pnpm dev
-    ```
-
-    The application will be available at [http://localhost:9002](http://localhost:9002).
-
-## Deployment
-
-This project is configured for deployment to Firebase Hosting.
-
-1.  **Login to Firebase:**
-    ```bash
-    firebase login
-    ```
-
-2.  **Select your Firebase project:**
-    (If you haven't already)
-    ```bash
-    firebase use --add
-    ```
-    And select the project you created.
-
-3.  **Build and Deploy:**
-    ```bash
-    firebase deploy --only hosting
-    ```
-
-This command will build the Next.js application and deploy it to Firebase Hosting. The `firebase.json` file is already configured to serve the Next.js app correctly.
-=======
-# Laederhub
-
-Laederhub is an MVP backend that helps small businesses unify SaaS data silos and get immediate analytics insights. The monorepo is centered on a FastAPI service that authenticates users via Firebase, captures intake conversations with an LLM orchestrator, connects to Constant Contact via MCP clients, and stages data in Google Cloud for downstream analytics.
-
-## Architecture Overview
-- **Authentication**: Incoming requests present Firebase ID tokens that are verified server-side.
-- **Intake Chat**: An orchestrated LLM workflow captures user goals and updates their profile.
-- **Connections**: The Constant Contact integration is stubbed via an MCP client to demonstrate OAuth handshakes and data pulls.
-- **Analytics Pull**: Example route shows how campaign metrics would land in a staging table in BigQuery after persisting raw JSON to GCS.
-- **Suggestions**: Hard-coded KPI suggestions illustrate later LLM-driven analysis.
-
-## Services
-- `services/api`: FastAPI application with modular routers, configuration, logging, security, data, and LLM orchestration helpers.
-
-## Getting Started
-1. Duplicate `.env.example` to `.env` and populate Firebase, GCP, and MCP configuration values.
-2. Install dependencies with Poetry (or your preferred tool) and activate the environment.
-3. Run `scripts/dev_bootstrap.sh` to export environment variables and start the FastAPI app.
-4. Hit `/intake/chat` to simulate an intake conversation, `/connects/constant-contact/start` to initiate a dummy connection, and `/analytics/pull` to walk through the analytics pipeline.
+## Backend Development
+1. Create and populate `.env` using the variables documented in `TASKS.md`.
+2. Install dependencies with Poetry:
+   ```bash
+   poetry install
+   ```
+3. Start the FastAPI service (includes env bootstrapping and sensible fallbacks when credentials are missing):
+   ```bash
+   ./scripts/dev_bootstrap.sh
+   ```
+4. Useful routes while stubs are in place:
+   - `GET /health` — Service heartbeat.
+   - `POST /intake/chat` — Runs the LLM intake stub and stores a profile.
+   - `POST /connects/constant-contact/start` — Simulates an OAuth handshake.
+   - `POST /analytics/pull` — Demonstrates staging data to GCS/BigQuery with graceful fallbacks.
 
 ## Testing
-Run `pytest` from the repository root. The suite currently includes basic smoke tests to validate application creation.
->>>>>>> main
+- Run API unit tests with:
+  ```bash
+  poetry run pytest
+  ```
+- Front-end testing will be added as the UI stabilizes; current focus is on API smoke coverage (`tests/unit/test_basic.py`).
+
+## Deployment Notes
+- The Next.js app is configured for Firebase App Hosting. Customize routing to serve the public landing page at `laederdata.com` and proxy `/hub` to the authenticated experience.
+- Backend deployment targets (e.g., Cloud Run) should ensure access to Firestore, GCS, BigQuery, and the MCP service once real integrations replace stubs.
+
+## Roadmap
+Active tasks live in `TASKS.md`. Early priorities include wiring real MCP/LLM integrations, hardening data loaders, expanding test coverage, and finalizing environment provisioning.
