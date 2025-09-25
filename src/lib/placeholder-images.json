@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-background",
+      "description": "Abstract technology background for hero section",
+      "imageUrl": "https://images.unsplash.com/photo-1562575214-da9fcf59b907?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMHRlY2hub2xvZ3l8ZW58MHx8fHwxNzU4NzgzODAwfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "abstract technology"
+    },
+    {
+      "id": "service-chat",
+      "description": "Illustration for AI chat service",
+      "imageUrl": "https://images.unsplash.com/photo-1545987796-200677ee1011?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxkYXRhJTIwYW5hbHl0aWNzfGVufDB8fHx8MTc1ODgwNjEyOHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "data analytics"
+    },
+    {
+      "id": "service-integration",
+      "description": "Illustration for data source integration service",
+      "imageUrl": "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxkYXRhJTIwaW50ZWdyYXRpb258ZW58MHx8fHwxNzU4ODA3NTUyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "data integration"
+    },
+    {
+      "id": "service-kpi",
+      "description": "Illustration for KPI analytics service",
+      "imageUrl": "https://images.unsplash.com/photo-1608222351212-18fe0ec7b13b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMGRhc2hib2FyZHxlbnwwfHx8fDE3NTg4MDYxNDl8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "business dashboard"
+    },
+    {
+      "id": "about-us",
+      "description": "Image for the about us section, showing a modern office or team",
+      "imageUrl": "https://images.unsplash.com/photo-1525896544042-354764aa27e6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8bW9kZXJuJTIwb2ZmaWNlfGVufDB8fHx8MTc1ODcwOTc4Mnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "modern office"
+    }
+  ]
 }
