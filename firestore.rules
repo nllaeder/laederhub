@@ -1,0 +1,138 @@
+/**
+ * @fileoverview Firestore Security Rules for LaederHub application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Each user has full control over their profile, MCP connections, and chat messages.
+ *
+ * Data Structure:
+ * All data is nested under /users/{userId}, ensuring that data is scoped to individual users. MCP connections and chat messages are stored as subcollections
+ * to the user's profile.
+ *
+ * Key Security Decisions:
+ * - Users can only access their own data. No cross-user access is permitted.
+ * - Listing of user profiles is disallowed to prevent information disclosure.
+ *
+ * Denormalization for Authorization:
+ * The 'userProfileId' is denormalized into the 'ChatMessage' and 'McpConnection' documents. This avoids needing to perform extra reads (get() calls)
+ * to validate ownership.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Protects user profile data, ensuring only the owner can read and write.
+     * @path /users/{userId}
+     * @allow (create) - Authenticated user creates their own profile with matching userId.
+     * @allow (get, update, delete) - Authenticated user with a matching userId can access/modify their profile.
+     * @deny (create) - Unauthenticated user attempts to create a profile.
+     * @deny (update, delete) - Authenticated user attempts to modify a profile with a mismatched userId.
+     * @principle Enforces document ownership for all operations on the user profile.
+     */
+    match /users/{userId} {
+      // Helper function to check if the user is signed in and owns the resource.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+
+      // Allow the user to create their own profile if the userId matches their auth.uid.
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
+
+      // Allow the user to get their own profile if the userId matches their auth.uid.
+      allow get: if isSignedIn() && isOwner(userId);
+
+      // Allow the user to update their own profile if the userId matches their auth.uid and document exists.
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+
+      // Allow the user to delete their own profile if the userId matches their auth.uid and document exists.
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+
+      // Prevent listing of all user profiles.
+      allow list: if false;
+    }
+
+    /**
+     * @description Protects MCP connections, ensuring only the owner can manage them.
+     * @path /users/{userId}/mcpConnections/{mcpConnectionId}
+     * @allow (create) - Authenticated user creates a connection under their profile with matching userId.
+     * @allow (get, update, delete) - Authenticated user with a matching userId can access/modify their connections.
+     * @deny (create) - Unauthenticated user attempts to create a connection.
+     * @deny (update, delete) - Authenticated user attempts to modify a connection with a mismatched userId.
+     * @principle Enforces document ownership for all operations on MCP connections.
+     */
+    match /users/{userId}/mcpConnections/{mcpConnectionId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+
+      // Allow the user to create an MCP connection if the userId matches their auth.uid.
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+
+      // Allow the user to get an MCP connection if the userId matches their auth.uid.
+      allow get: if isSignedIn() && isOwner(userId);
+
+      // Allow the user to update their own MCP connection if the userId matches their auth.uid and document exists.
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+      // Allow the user to delete their own MCP connection if the userId matches their auth.uid and document exists.
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+
+      // Allow the owner to list their own MCP connections.
+      allow list: if isSignedIn() && isOwner(userId);
+    }
+
+     /**
+      * @description Protects chat messages, ensuring only the owner can manage them.
+      * @path /users/{userId}/chatMessages/{chatMessageId}
+      * @allow (create) - Authenticated user creates a message under their profile with matching userId.
+      * @allow (get, update, delete) - Authenticated user with a matching userId can access/modify their messages.
+      * @deny (create) - Unauthenticated user attempts to create a message.
+      * @deny (update, delete) - Authenticated user attempts to modify a message with a mismatched userId.
+      * @principle Enforces document ownership for all operations on chat messages.
+      */
+    match /users/{userId}/chatMessages/{chatMessageId} {
+       function isSignedIn() {
+         return request.auth != null;
+       }
+
+       function isOwner(userId) {
+         return request.auth.uid == userId;
+       }
+
+       function isExistingOwner(userId) {
+         return isOwner(userId) && resource != null;
+       }
+
+       // Allow the user to create a chat message if the userId matches their auth.uid.
+       allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+
+       // Allow the user to get a chat message if the userId matches their auth.uid.
+       allow get: if isSignedIn() && isOwner(userId);
+
+       // Allow the user to update their own chat message if the userId matches their auth.uid and document exists.
+       allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+       // Allow the user to delete their own chat message if the userId matches their auth.uid and document exists.
+       allow delete: if isSignedIn() && isExistingOwner(userId);
+
+       // Allow the owner to list their own chat messages.
+       allow list: if isSignedIn() && isOwner(userId);
+     }
+  }
+}

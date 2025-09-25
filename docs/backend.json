@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user profile in the LaederHub application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user profile."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL of the user's profile photo (if available).",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Date and time when the user profile was created.",
+          "format": "date-time"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "Date and time of the user's last login.",
+          "format": "date-time"
+        },
+        "mcpConnections": {
+          "type": "array",
+          "description": "References to MCP Connections. (Relationship: UserProfile 1:N McpConnection)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "createdAt"
+      ]
+    },
+    "ChatMessage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ChatMessage",
+      "type": "object",
+      "description": "Represents a single chat message within the LaederHub application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the chat message."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ChatMessage).  The user who sent the message."
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the chat message."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Date and time when the message was sent.",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "description": "The source of the message. i.e User or Bot."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "content",
+        "timestamp"
+      ]
+    },
+    "McpConnection": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "McpConnection",
+      "type": "object",
+      "description": "Represents a connection to a Managed Content Provider (MCP) like Constant Contact.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MCP connection."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N McpConnection).  The user who owns this connection."
+        },
+        "provider": {
+          "type": "string",
+          "description": "Name of the MCP provider (e.g., 'Constant Contact')."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the MCP connection (e.g., 'connected', 'pending', 'error')."
+        },
+        "accessToken": {
+          "type": "string",
+          "description": "Access token used to authenticate with the MCP. Securely stored."
+        },
+        "refreshToken": {
+          "type": "string",
+          "description": "Refresh token used to obtain new access tokens. Securely stored."
+        },
+        "expiryDate": {
+          "type": "string",
+          "description": "Date and time when the access token expires.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "provider",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile data.  Path-based ownership enables simple security rules.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user.  This ID is used for path-based ownership."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/mcpConnections/{mcpConnectionId}",
+        "definition": {
+          "entityName": "McpConnection",
+          "schema": {
+            "$ref": "#/backend/entities/McpConnection"
+          },
+          "description": "Stores MCP connections associated with a user. Includes denormalized 'userProfileId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns this connection."
+            },
+            {
+              "name": "mcpConnectionId",
+              "description": "The unique identifier for the MCP connection."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/chatMessages/{chatMessageId}",
+        "definition": {
+          "entityName": "ChatMessage",
+          "schema": {
+            "$ref": "#/backend/entities/ChatMessage"
+          },
+          "description": "Stores chat messages associated with a user. Includes denormalized 'userProfileId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns this chat message."
+            },
+            {
+              "name": "chatMessageId",
+              "description": "The unique identifier for the chat message."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure Authorization Independence, support QAPs, and maintain data integrity. User profiles and their associated MCP connections are structured under the `/users/{userId}` path to enforce strict ownership. Chat messages are stored in a subcollection under user profiles to maintain context. This design denormalizes the `userProfileId` into the `ChatMessage` and `McpConnection` documents enabling simple security rules without the need for `get()` calls. Specifically, the security rules can easily verify that the `userProfileId` on a `ChatMessage` or `McpConnection` matches the `userId` in the path, ensuring that only the owner of the profile can access the messages and connections.  This design achieves Authorization Independence as all authorization information is contained within the document itself, avoiding hierarchical dependencies. It also supports QAPs by allowing efficient listing of chat messages and MCP connections for a given user. The separation of user-owned data into dedicated paths ensures a homogeneous security posture."
+  }
+}
