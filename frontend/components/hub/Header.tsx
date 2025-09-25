@@ -1,7 +1,6 @@
 "use client";
 
 import Link from 'next/link';
-import { useUser, useAuth } from '@/firebase';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,31 +11,43 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { DatabaseZap, LogOut } from 'lucide-react';
+import { DatabaseZap, Loader2, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
-import { signOut } from 'firebase/auth';
+import { signOut, useSession } from 'next-auth/react';
 
 export function HubHeader() {
-  const { user } = useUser();
-  const auth = useAuth();
+  const { data: session, status } = useSession();
   const { toast } = useToast();
-  const router = useRouter();
+  const user = session?.user;
+  const isLoading = status === 'loading';
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await signOut({ callbackUrl: '/' });
       toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
-      router.push('/');
     } catch (error: any) {
-      toast({ variant: 'destructive', title: 'Logout Failed', description: error.message });
+      toast({ variant: 'destructive', title: 'Logout Failed', description: error?.message ?? 'Please try again.' });
     }
   };
-  
-  const getInitials = (email: string | null | undefined) => {
-    if (!email) return 'U';
-    return email.substring(0, 2).toUpperCase();
+
+  const getInitials = (value: string | null | undefined) => {
+    if (!value) return 'U';
+    return value.substring(0, 2).toUpperCase();
   };
+
+  if (isLoading || !user) {
+    return (
+      <header className="flex h-16 items-center border-b px-4 md:px-6 shrink-0 bg-card">
+        <div className="flex items-center gap-2 font-semibold">
+          <DatabaseZap className="h-6 w-6 text-primary" />
+          <span className="font-bold font-headline">LaederHub</span>
+        </div>
+        <div className="ml-auto flex items-center gap-4">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="flex h-16 items-center border-b px-4 md:px-6 shrink-0 bg-card">
@@ -49,17 +60,17 @@ export function HubHeader() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.photoURL || ''} alt={user?.displayName || 'User'} />
-                <AvatarFallback>{getInitials(user?.email)}</AvatarFallback>
+                <AvatarImage src={user?.image ?? ''} alt={user?.name ?? 'User'} />
+                <AvatarFallback>{getInitials(user?.email ?? user?.name)}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.displayName || 'User'}</p>
+                <p className="text-sm font-medium leading-none">{user?.name ?? 'User'}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  {user?.email}
+                  {user?.email ?? 'Unknown email'}
                 </p>
               </div>
             </DropdownMenuLabel>

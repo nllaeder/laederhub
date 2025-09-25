@@ -1,27 +1,19 @@
-"use client";
+import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
+import { getServerSession } from 'next-auth/next';
 
-import { useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@/firebase';
-import { Loader2 } from 'lucide-react';
 import { HubHeader } from '@/components/hub/Header';
+import { authOptions } from '@/lib/auth';
 
-function ProtectedLayout({ children }: { children: ReactNode }) {
-  const { user, isUserLoading } = useUser();
-  const router = useRouter();
+interface HubLayoutProps {
+  children: ReactNode;
+}
 
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, isUserLoading, router]);
+export default async function HubLayout({ children }: HubLayoutProps) {
+  const session = await getServerSession(authOptions);
 
-  if (isUserLoading || !user) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  if (!session?.user) {
+    redirect('/login');
   }
 
   return (
@@ -29,12 +21,5 @@ function ProtectedLayout({ children }: { children: ReactNode }) {
       <HubHeader />
       {children}
     </div>
-  );
-}
-
-
-export default function HubLayout({ children }: { children: ReactNode }) {
-  return (
-    <ProtectedLayout>{children}</ProtectedLayout>
   );
 }

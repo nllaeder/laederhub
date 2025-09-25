@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth } from './useAuth';
+import { useSession } from 'next-auth/react';
 
 // This is a placeholder for your FastAPI backend URL.
 // In a real application, you would get this from environment variables.
@@ -12,23 +12,26 @@ const API_BASE_URL = 'http://your-fastapi-backend.example.com';
  * This file is provided as a starting point for your backend integration.
  */
 export const useApi = () => {
-  const { user } = useAuth();
+  const { data: session } = useSession();
 
   const makeRequest = async <T>(
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     body?: any
   ): Promise<T> => {
-    if (!user) {
+    if (!session?.user) {
       throw new Error('User is not authenticated. Cannot make API requests.');
     }
 
-    const token = await user.getIdToken();
+    const token = session.user.accessToken;
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
     };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
     const config: RequestInit = {
       method,

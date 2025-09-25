@@ -3,16 +3,16 @@
 LaederHub combines a Next.js front-end experience with a FastAPI backend to power LaederData's landing page and analytics hub. The repository houses everything needed to market the product at `laederdata.com` and run the authenticated chat interface at `hub.laederdata.com`.
 
 ## What’s Inside
-- **Landing site (`src/app/page.tsx`)** &mdash; Public marketing experience with hero, services, and contact sections.
-- **Hub app (`src/app/hub/*`)** &mdash; Auth-protected workspace with a chat interface, source status bar, and Firebase-gated layout.
-- **FastAPI service (`services/api`)** &mdash; Verifies Firebase ID tokens, orchestrates intake conversations, simulates MCP connectors, and stubs analytics ingestion to GCS + BigQuery.
+- **Landing site (`frontend/app/page.tsx`)** &mdash; Public marketing experience with hero, services, and contact sections.
+- **Hub app (`frontend/app/hub/*`)** &mdash; Auth-protected workspace with Vercel/NextAuth session checks, chat UI, and source status bar.
+- **FastAPI service (`backend/app`)** &mdash; Owns the AI/data orchestration surface, currently stubbed for MCP connectors and analytics ingestion.
 - **Shared docs (`docs/`, `TASKS.md`)** &mdash; Product blueprint, backend schemas, and prioritized implementation checklist.
 
 ## Repository Structure
 ```
 .
-├── src/                # Next.js application (landing + hub + shared UI)
-├── services/api/       # FastAPI backend, routers, data loaders, MCP stubs
+├── frontend/           # Next.js application (landing + hub + shared UI)
+├── backend/            # FastAPI backend, routers, data loaders, MCP stubs
 ├── docs/               # Product and backend blueprints
 ├── scripts/            # Helper scripts for local development
 ├── tests/              # Pytest suites (unit + future integration)
@@ -25,7 +25,7 @@ LaederHub combines a Next.js front-end experience with a FastAPI backend to powe
 - npm (ships with Node) or your preferred package manager
 - Python 3.11+
 - Poetry (recommended) or another virtual environment manager
-- Firebase CLI for hosting deployments (optional during development)
+- Vercel account (for hosting the frontend) and Render or similar for the backend
 
 ## Front-End Development
 1. Install dependencies:
@@ -37,7 +37,7 @@ LaederHub combines a Next.js front-end experience with a FastAPI backend to powe
    npm run dev
    ```
    The app serves on [http://localhost:9002](http://localhost:9002).
-3. Configure Firebase client settings by updating `src/firebase/config.ts` for local work. In production, Firebase App Hosting injects credentials automatically.
+3. Supply auth environment variables (`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`) so NextAuth can complete the OAuth flow locally and on Vercel.
 
 ## Domain Routing
 - Host-based rewrites in `src/middleware.ts` map `hub.laederdata.com` traffic to the `/hub` route while leaving the public marketing site at `/`.
@@ -68,8 +68,8 @@ LaederHub combines a Next.js front-end experience with a FastAPI backend to powe
 - Front-end testing will be added as the UI stabilizes; current focus is on API smoke coverage (`tests/unit/test_basic.py`).
 
 ## Deployment Notes
-- The Next.js app is configured for Firebase App Hosting. Customize routing to serve the public landing page at `laederdata.com` and proxy `/hub` to the authenticated experience.
-- Backend deployment targets (e.g., Cloud Run) should ensure access to Firestore, GCS, BigQuery, and the MCP service once real integrations replace stubs.
+- Import the repo into Vercel and set the project root to `frontend/`; Vercel will auto-detect the Next.js app and respect the auth route handlers.
+- Deploy the FastAPI service to Render (or another managed host) pointing at the `backend/` directory once environment configuration is in place.
 
 ## Roadmap
 Active tasks live in `TASKS.md`. Early priorities include wiring real MCP/LLM integrations, hardening data loaders, expanding test coverage, and finalizing environment provisioning.
