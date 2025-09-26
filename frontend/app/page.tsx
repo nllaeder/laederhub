@@ -1,21 +1,14 @@
-import { Header } from '@/components/landing/Header';
-import { Hero } from '@/components/landing/Hero';
-import { Services } from '@/components/landing/Services';
-import { About } from '@/components/landing/About';
-import { Contact } from '@/components/landing/Contact';
-import { Footer } from '@/components/landing/Footer';
-
-export default function LandingPage() {
+export default function WorkInProgressPage() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-grow">
-        <Hero />
-        <Services />
-        <About />
-        <Contact />
-      </main>
-      <Footer />
-    </div>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
+      <div className="space-y-4">
+        <p className="text-sm uppercase tracking-wide text-muted-foreground">LaederHub</p>
+        <h1 className="text-3xl font-headline sm:text-4xl">Workspace Under Construction</h1>
+        <p className="max-w-xl text-muted-foreground">
+          We&rsquo;re building a new analytics hub experience. Check back soon for updates, or reach out to the
+          LaederData team if you&rsquo;d like early access.
+        </p>
+      </div>
+    </main>
   );
 }

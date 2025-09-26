@@ -16,9 +16,8 @@ export function middleware(request: NextRequest) {
 
   if (HUB_HOSTS.has(hostname)) {
     const url = request.nextUrl.clone();
-
-    if (!url.pathname.startsWith('/hub')) {
-      url.pathname = `/hub${url.pathname === '/' ? '' : url.pathname}`;
+    if (url.pathname !== '/wip') {
+      url.pathname = '/wip';
       return NextResponse.rewrite(url);
     }
   }

@@ -37,7 +37,7 @@ LaederHub combines a Next.js front-end experience with a FastAPI backend to powe
    npm run dev
    ```
    The app serves on [http://localhost:9002](http://localhost:9002).
-3. Supply auth environment variables (`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`) so NextAuth can complete the OAuth flow locally and on Vercel.
+3. Supply auth environment variables (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`) so NextAuth can complete the OAuth flow locally and on Vercel.
 
 ## Domain Routing
 - Host-based rewrites in `src/middleware.ts` map `hub.laederdata.com` traffic to the `/hub` route while leaving the public marketing site at `/`.
@@ -68,8 +68,14 @@ LaederHub combines a Next.js front-end experience with a FastAPI backend to powe
 - Front-end testing will be added as the UI stabilizes; current focus is on API smoke coverage (`tests/unit/test_basic.py`).
 
 ## Deployment Notes
-- Import the repo into Vercel and set the project root to `frontend/`; Vercel will auto-detect the Next.js app and respect the auth route handlers.
+- Import the repo into Vercel and set the project root to `frontend/`; Vercel will auto-detect the Next.js app and respect the auth route handlers. The production build currently surfaces only the hub experience and serves a work-in-progress page at `/` and via the hub hostnames.
 - Deploy the FastAPI service to Render (or another managed host) pointing at the `backend/` directory once environment configuration is in place.
+
+## Branching & Release Workflow
+- `main` &mdash; protected branch that auto-deploys to Vercel. Only merge here once work has passed review/QA.
+- `develop` (recommended) &mdash; shared integration branch for ongoing changes. Point local preview deployments (or Vercel preview environments) at this branch to verify updates before promoting to `main`.
+- Feature work &mdash; create short-lived branches off `develop` (e.g., `feature/add-chat-streaming`). Open pull requests into `develop`, then promote to `main` once validated.
+- For hotfixes against production, branch from `main`, test, merge back into `main`, and cherry-pick into `develop` to keep histories aligned.
 
 ## Roadmap
 Active tasks live in `TASKS.md`. Early priorities include wiring real MCP/LLM integrations, hardening data loaders, expanding test coverage, and finalizing environment provisioning.

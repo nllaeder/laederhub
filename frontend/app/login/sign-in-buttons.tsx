@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { signIn } from 'next-auth/react';
-import { Github } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -31,11 +31,15 @@ export function SignInButtons() {
         type="button"
         variant="outline"
         className="w-full"
-        onClick={() => handleProviderSignIn('github')}
+        onClick={() => handleProviderSignIn('google')}
         disabled={isPending}
       >
-        <Github className="mr-2 h-4 w-4" />
-        Continue with GitHub
+        {isPending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Mail className="mr-2 h-4 w-4" />
+        )}
+        Continue with Google
       </Button>
     </div>
   );
