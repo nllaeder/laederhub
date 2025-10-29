@@ -9,6 +9,7 @@ declare module 'next-auth' {
       image?: string | null;
       accessToken?: string;
     };
+    apiToken?: string;
   }
 }
 

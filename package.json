@@ -1,0 +1,23 @@
+{
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.1",
+    "@vercel/postgres": "^0.10.0",
+    "drizzle-orm": "^0.44.7",
+    "next-auth": "^5.0.0-beta.25"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.5",
+    "tsx": "^4.20.6",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "drizzle-kit migrate",
+    "db:up": "pnpm drizzle:generate && pnpm drizzle:migrate"
+  }
+}

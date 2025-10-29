@@ -57,3 +57,4 @@ out/
 # Env
 .env
 .env.*
+.env*.local

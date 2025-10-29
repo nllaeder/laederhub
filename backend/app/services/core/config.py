@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     gcs_bucket_raw: str = Field(default="gs://laederhub-raw", alias="GCS_BUCKET_RAW")
     bigquery_dataset: str = Field(default="laederhub_staging", alias="BIGQUERY_DATASET")
     default_region: str = Field(default="us-central1", alias="DEFAULT_REGION")
+    nextauth_secret: str = Field(default="", alias="NEXTAUTH_SECRET")
 
     mcp_cc_base_url: str = Field(default="https://mcp-constant-contact.local", alias="MCP_CC_BASE_URL")
     mcp_api_key: str = Field(default="dev-mcp-key", alias="MCP_API_KEY")

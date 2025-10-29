@@ -23,15 +23,17 @@ export const useApi = () => {
       throw new Error('User is not authenticated. Cannot make API requests.');
     }
 
-    const token = session.user.accessToken;
+    const token = session.apiToken;
+
+    if (!token) {
+      throw new Error('Missing API token. Please sign in again.');
+    }
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
 
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    headers.Authorization = `Bearer ${token}`;
 
     const config: RequestInit = {
       method,

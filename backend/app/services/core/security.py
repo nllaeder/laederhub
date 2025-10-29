@@ -1,15 +1,14 @@
-"""Security utilities for Firebase-backed authentication."""
+"""Security utilities for NextAuth-backed authentication."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
-import firebase_admin
-from fastapi import Depends, HTTPException, status
+import jwt
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from firebase_admin import auth, credentials
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from .config import settings
 
@@ -17,46 +16,83 @@ logger = logging.getLogger(__name__)
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _ensure_firebase_app() -> None:
-    if firebase_admin._apps:
-        return
-
-    cred_path = Path(settings.firebase_credentials_path)
-    if not cred_path.exists():
-        logger.error("Firebase credentials file missing at %s", cred_path)
+def _decode_token(raw_token: str) -> dict[str, Any]:
+    secret = settings.nextauth_secret
+    if not secret:
+        logger.error("NEXTAUTH_SECRET is not configured for backend JWT verification")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Firebase credentials not configured",
+            detail="Authentication backend misconfigured",
         )
 
-    cred = credentials.Certificate(cred_path)
-    firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
-    logger.info("Initialized Firebase Admin for project %s", settings.firebase_project_id)
-
-
-async def get_current_user(
-    credentials_payload: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)]
-) -> dict:
-    if credentials_payload is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-
-    _ensure_firebase_app()
-
-    token = credentials_payload.credentials
     try:
-        decoded = auth.verify_id_token(token)
-    except auth.InvalidIdTokenError as exc:
-        logger.warning("Invalid Firebase ID token: %s", exc)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ID token") from exc
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception("Unexpected error verifying Firebase token")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed") from exc
+        payload = jwt.decode(
+            raw_token,
+            secret,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+    except ExpiredSignatureError as exc:
+        logger.info("Expired NextAuth token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired") from exc
+    except InvalidTokenError as exc:
+        logger.warning("Invalid NextAuth token: %s", exc)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+
+    uid = payload.get("sub")
+    if not uid:
+        logger.error("Decoded token missing subject")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
     return {
-        "uid": decoded.get("uid"),
-        "email": decoded.get("email"),
-        "claims": decoded,
+        "uid": str(uid),
+        "email": payload.get("email"),
+        "name": payload.get("name"),
+        "picture": payload.get("picture"),
+        "claims": payload,
     }
 
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
+def _extract_bearer_token(authorization_header: str | None) -> str:
+    if not authorization_header:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+
+    try:
+        scheme, token = authorization_header.split(" ", 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header") from exc
+
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
+
+    return token.strip()
+
+
+def authenticate_request(request: Request) -> None:
+    token = _extract_bearer_token(request.headers.get("Authorization"))
+    user = _decode_token(token)
+    request.state.user = user
+
+
+async def require_authentication(
+    request: Request,
+    credentials_payload: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
+) -> None:
+    if credentials_payload is None:
+        authenticate_request(request)
+        return
+
+    user = _decode_token(credentials_payload.credentials)
+    request.state.user = user
+
+
+def get_current_user(request: Request) -> dict[str, Any]:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return user
+
+
+CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
+
+__all__ = ["CurrentUser", "require_authentication", "get_current_user", "authenticate_request"]
