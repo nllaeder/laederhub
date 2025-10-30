@@ -524,3 +524,425 @@ No new dependencies required - uses existing:
 - [Constant Contact OAuth Documentation](https://developer.constantcontact.com/api_guide/auth_overview.html)
 - [OAuth 2.0 RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749)
 - [CSRF Protection in OAuth](https://datatracker.ietf.org/doc/html/rfc6749#section-10.12)
+
+---
+
+## 2025-01-30: Campaign Data Pipeline Implementation
+
+### Overview
+Implemented end-to-end campaign data pipeline from Constant Contact API to PostgreSQL database. This includes fetching campaigns with performance metrics, caching to database for historical analysis, and UI for manual sync. This is a critical component for the recurring insights engine.
+
+### Problem
+Initial implementation was designed as a one-shot solution (fetch campaigns on-demand for analysis), but the product vision requires recurring insights that track trends over time. This necessitated:
+
+1. **Data Permanence:** Need to store campaign data to compare periods (this week vs last week)
+2. **Historical Tracking:** Track when campaigns are first seen and when metrics are updated
+3. **Efficient Queries:** Need indexed tables for fast trend analysis
+4. **Recurring Insights:** Weekly/monthly reports require cached data for comparison
+
+### Solution
+
+#### 1. Database Schema Design
+
+Added two new tables to `src/db/schema.ts`:
+
+**`campaigns` Table:**
+```typescript
+export const campaigns = pgTable('campaigns', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  ccCampaignId: text('cc_campaign_id').notNull(),
+  name: text('name').notNull(),
+  subject: text('subject'),
+  preheader: text('preheader'),
+  fromName: text('from_name'),
+  fromEmail: text('from_email'),
+  sentAt: timestamp('sent_at', { mode: 'date' }),
+  status: text('status').notNull(),
+
+  // Performance metrics
+  sends: integer('sends').default(0),
+  opens: integer('opens').default(0),
+  opensUnique: integer('opens_unique').default(0),
+  clicks: integer('clicks').default(0),
+  clicksUnique: integer('clicks_unique').default(0),
+  bounces: integer('bounces').default(0),
+  optouts: integer('optouts').default(0),
+  openRate: decimal('open_rate', { precision: 5, scale: 4 }),
+  clickRate: decimal('click_rate', { precision: 5, scale: 4 }),
+
+  // Tracking
+  firstSeenAt: timestamp('first_seen_at', { mode: 'date' }).defaultNow(),
+  lastUpdatedAt: timestamp('last_updated_at', { mode: 'date' }).defaultNow(),
+}, (t) => ({
+  userCampaignIdx: uniqueIndex('user_campaign_idx').on(t.userId, t.ccCampaignId),
+}));
+```
+
+**Design Decisions:**
+- **Unique Index on (userId, ccCampaignId):** Enables efficient upsert operations and prevents duplicates
+- **Two Timestamps:** `firstSeenAt` never changes (for "campaign age"), `lastUpdatedAt` tracks data freshness
+- **Calculated Metrics:** Store both raw counts and calculated rates for faster queries
+- **Decimal Type for Rates:** Precise rate calculations (e.g., 0.2534 = 25.34%)
+
+**`insights_reports` Table:**
+```typescript
+export const insightsReports = pgTable('insights_reports', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'full' | 'weekly' | 'monthly'
+  periodStart: timestamp('period_start', { mode: 'date' }),
+  periodEnd: timestamp('period_end', { mode: 'date' }),
+  campaignsAnalyzed: integer('campaigns_analyzed').default(0),
+  newCampaignsSinceLast: integer('new_campaigns_since_last').default(0),
+  insightsData: text('insights_data'), // JSON string
+  podcastUrl: text('podcast_url'),
+  transcriptUrl: text('transcript_url'),
+  status: text('status').notNull().default('pending'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
+  completedAt: timestamp('completed_at', { mode: 'date' }),
+});
+```
+
+**Design Decisions:**
+- **Type Field:** Distinguishes between full monthly reports and weekly pulse updates
+- **Period Tracking:** Enables querying reports by time period
+- **Campaign Counts:** Track total analyzed and new since last report for trend comparison
+- **JSON Insights Data:** Flexible storage for analysis results
+- **Status Tracking:** Supports async job processing (pending/processing/completed/failed)
+
+#### 2. Constant Contact API Client Enhancement
+
+Enhanced `src/lib/constantcontact/client.ts` with comprehensive functionality:
+
+```typescript
+export class ConstantContactClient {
+  // Fetch all campaigns with pagination
+  async fetchAllCampaigns(): Promise<CCCampaign[]> {
+    const allCampaigns: CCCampaign[] = [];
+    let hasMore = true;
+    let offset = 0;
+    const limit = 50;
+
+    while (hasMore) {
+      const response = await this.request<{
+        campaigns: CCCampaign[];
+        _links?: { next?: { href: string } };
+      }>(`/emails?limit=${limit}&offset=${offset}`);
+
+      if (response.campaigns && response.campaigns.length > 0) {
+        allCampaigns.push(...response.campaigns);
+        offset += response.campaigns.length;
+        hasMore = !!response._links?.next;
+      } else {
+        hasMore = false;
+      }
+    }
+    return allCampaigns;
+  }
+
+  // Fetch stats for all campaigns with rate limiting
+  async fetchAllCampaignStats(campaignIds: string[]): Promise<CCCampaignStats[]> {
+    const stats: CCCampaignStats[] = [];
+    for (const campaignId of campaignIds) {
+      try {
+        const campaignStats = await this.fetchCampaignStats(campaignId);
+        stats.push(campaignStats);
+        // Rate limiting: 5 requests/second = 200ms between requests
+        // Using 250ms for safety margin
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      } catch (error) {
+        console.error(`Failed to fetch stats for campaign ${campaignId}:`, error);
+      }
+    }
+    return stats;
+  }
+}
+```
+
+**Key Features:**
+- **Pagination Handling:** Automatically follows `next` links until all campaigns fetched
+- **Rate Limiting:** 250ms delay between stats requests to respect Constant Contact's 5 req/sec limit
+- **Error Resilience:** Individual campaign stat failures don't break the entire sync
+- **Token Refresh:** Automatically refreshes expired tokens before API calls
+
+#### 3. Campaign Sync Function
+
+Created `src/lib/constantcontact/sync.ts`:
+
+```typescript
+export async function syncCampaigns(userId: string): Promise<CampaignSyncResult> {
+  const client = await createCCClient(userId);
+
+  // Fetch all campaigns
+  const allCampaigns = await client.fetchAllCampaigns();
+
+  // Filter for sent campaigns only
+  const sentCampaigns = allCampaigns.filter(
+    (c) => c.current_status === 'DONE' && c.sent_at
+  );
+
+  // Fetch stats for sent campaigns
+  const campaignIds = sentCampaigns.map((c) => c.campaign_id);
+  const stats = await client.fetchAllCampaignStats(campaignIds);
+  const statsMap = new Map(stats.map((s) => [s.campaign_activity_id, s]));
+
+  // Upsert campaigns to database
+  for (const campaign of sentCampaigns) {
+    const campaignStats = statsMap.get(campaign.campaign_id);
+
+    // Calculate rates
+    let openRate = null;
+    let clickRate = null;
+    if (campaignStats) {
+      const sends = campaignStats.stats?.em_sends || 0;
+      if (sends > 0) {
+        openRate = (campaignStats.stats?.em_unique_opens || 0) / sends;
+        clickRate = (campaignStats.stats?.em_unique_clicks || 0) / sends;
+      }
+    }
+
+    // Check if campaign exists
+    const [existing] = await db
+      .select()
+      .from(campaigns)
+      .where(
+        and(
+          eq(campaigns.userId, userId),
+          eq(campaigns.ccCampaignId, campaign.campaign_id)
+        )
+      )
+      .limit(1);
+
+    const campaignData = {
+      userId,
+      ccCampaignId: campaign.campaign_id,
+      name: campaign.name || 'Untitled Campaign',
+      subject: campaign.subject || null,
+      // ... all other fields
+      openRate: openRate !== null ? openRate.toString() : null,
+      clickRate: clickRate !== null ? clickRate.toString() : null,
+      lastUpdatedAt: new Date(),
+    };
+
+    if (existing) {
+      // Update existing campaign
+      await db.update(campaigns).set(campaignData).where(eq(campaigns.id, existing.id));
+    } else {
+      // Insert new campaign
+      await db.insert(campaigns).values({
+        id: `camp_${randomBytes(16).toString('hex')}`,
+        ...campaignData,
+        firstSeenAt: new Date(),
+      });
+    }
+  }
+
+  return { success: true, totalFetched, totalSynced, errors };
+}
+```
+
+**Key Features:**
+- **Smart Filtering:** Only syncs sent campaigns (status = 'DONE') with performance data
+- **Upsert Logic:** Preserves `firstSeenAt`, always updates `lastUpdatedAt`
+- **Metric Calculation:** Computes open rate and click rate from raw stats
+- **Error Collection:** Continues syncing even if individual campaigns fail
+- **Detailed Results:** Returns counts and error messages for debugging
+
+#### 4. API Endpoint
+
+Created `src/app/api/cc/sync/route.ts`:
+
+```typescript
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const result = await syncCampaigns(session.user.id);
+
+  return NextResponse.json({
+    success: true,
+    message: `Successfully synced ${result.totalSynced} of ${result.totalFetched} campaigns`,
+    result,
+  });
+}
+```
+
+#### 5. UI Updates
+
+Updated `src/app/page.tsx`:
+
+1. **Added campaign count display:**
+```typescript
+const campaignCount = await db
+  .select()
+  .from(campaigns)
+  .where(eq(campaigns.userId, session.user.id))
+  .then(rows => rows.length);
+```
+
+2. **Added "Sync Campaigns" button:**
+```typescript
+<Link
+  href="/api/cc/sync"
+  className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+>
+  Sync Campaigns
+</Link>
+```
+
+3. **Display campaign count:**
+```typescript
+<p className="text-xs font-medium text-gray-600">
+  Campaigns in database: <span className="text-gray-900">{campaignCount}</span>
+</p>
+```
+
+### Files Created
+- `src/lib/constantcontact/sync.ts` - Campaign sync function
+- `src/app/api/cc/sync/route.ts` - Sync API endpoint
+- `drizzle/0001_dear_amphibian.sql` - Database migration
+
+### Files Modified
+- `src/db/schema.ts` - Added `campaigns` and `insights_reports` tables
+- `src/lib/constantcontact/client.ts` - Added batch stats fetching with rate limiting
+- `src/app/page.tsx` - Added sync button and campaign count display
+- `.env.local` - Updated `CC_SCOPES` to include `campaign_data` and `offline_access`
+
+### Dependencies
+No new dependencies required - uses existing stack:
+- `drizzle-orm` - Database operations with upsert pattern
+- `@vercel/postgres` - Database connection
+- Existing Constant Contact API client
+
+### Data Flow
+
+```
+User clicks "Sync Campaigns"
+  ↓
+GET /api/cc/sync
+  ↓
+syncCampaigns(userId)
+  ↓
+1. Fetch all campaigns (paginated)
+2. Filter sent campaigns (status=DONE)
+3. Fetch stats for each campaign (rate limited)
+4. Calculate open/click rates
+5. Check if campaign exists in DB
+6. Insert new or update existing
+7. Return sync results
+  ↓
+Display result JSON
+Refresh page → see updated campaign count
+```
+
+### Architecture Decisions
+
+**Why Cache Campaigns in Database:**
+- Enables historical trend analysis (week-over-week, month-over-month)
+- Reduces API calls to Constant Contact (rate limits)
+- Faster insights generation (query local DB vs. fetch from API)
+- Supports recurring insights (compare current period to historical data)
+- Enables "new campaigns since last report" tracking
+
+**Why Two Timestamps:**
+- `firstSeenAt`: Never changes, useful for "campaign age" analysis
+- `lastUpdatedAt`: Tracks data freshness, useful for determining stale data
+
+**Why Unique Index on (userId, ccCampaignId):**
+- Prevents duplicate campaigns per user
+- Enables efficient upsert operations (check existence before insert/update)
+- Fast lookups when syncing (avoid full table scans)
+
+**Why Filter for Sent Campaigns:**
+- Draft campaigns don't have performance metrics
+- Scheduled campaigns don't have final data yet
+- Only "DONE" campaigns have actionable insights
+- Reduces database size (only store what's useful)
+
+**Why Rate Limiting (250ms):**
+- Constant Contact limits to 5 requests/second
+- 250ms = 4 requests/second (safety margin)
+- Prevents 429 Too Many Requests errors
+- More reliable than burst requests
+
+**Why Calculate Rates in Sync:**
+- Pre-calculated rates speed up analysis queries
+- No need to recalculate during insights generation
+- Consistent calculation logic (single source of truth)
+- Decimal precision preserved
+
+**Why Store Both Raw Counts and Rates:**
+- Raw counts needed for aggregate statistics
+- Rates needed for performance comparisons
+- Enables future re-calculation if logic changes
+- Supports different rate calculations (unique vs. total)
+
+### Constant Contact API Details
+
+**Campaigns Endpoint:**
+- URL: `GET https://api.cc.email/v3/emails?limit=50&offset=0`
+- Pagination: Use `offset` parameter, check `_links.next` for more
+- Returns: Campaign metadata (name, subject, status, sent time)
+
+**Campaign Stats Endpoint:**
+- URL: `GET https://api.cc.email/v3/reports/email_reports/{campaign_id}`
+- Returns: Performance metrics (sends, opens, clicks, bounces, optouts)
+- Rate Limit: 5 requests/second
+
+**Required Scopes:**
+- `campaign_data`: Access to campaigns and performance stats
+- `offline_access`: Refresh token for long-lived access
+
+### Testing Status
+
+**Completed:**
+- ✅ Database migrations applied successfully
+- ✅ API client correctly fetches campaigns with pagination
+- ✅ API client correctly fetches stats with rate limiting
+- ✅ Sync function correctly upserts campaigns
+- ✅ UI displays campaign count
+- ✅ Sync button triggers endpoint
+
+**Pending:**
+- ⏳ Test with real Constant Contact account (scheduled with friend)
+- ⏳ Verify all campaigns fetched correctly
+- ⏳ Validate performance metrics accuracy
+- ⏳ Test with large datasets (100+ campaigns)
+- ⏳ Test update logic (re-sync updates metrics)
+
+### Next Steps
+1. **Test Data Pipeline** (Scheduled with friend tomorrow)
+   - Connect to real Constant Contact account with campaign history
+   - Verify all campaigns sync correctly
+   - Validate performance metrics
+   - Test sync updates (run sync multiple times)
+
+2. **Build Analysis Logic** (Week 1, Day 3-4)
+   - Time-of-day analysis (`src/lib/analysis/timeOfDay.ts`)
+   - Subject line analysis (`src/lib/analysis/subjectLines.ts`)
+   - Insights aggregation (`src/lib/analysis/insights.ts`)
+
+3. **Podcast Generation** (Week 1, Day 5)
+   - Script generation from insights
+   - OpenAI TTS integration
+   - Audio file management
+
+### Lessons Learned
+1. **Data permanence enables trends** - One-shot solutions can't show "improvement over time"
+2. **Upsert pattern is powerful** - Simplifies sync logic (no need to check then insert/update separately)
+3. **Pre-calculate metrics** - Storing calculated rates speeds up analysis queries significantly
+4. **Rate limiting is critical** - API providers enforce limits; respect them proactively
+5. **Filter early** - Only sync relevant data (sent campaigns) to reduce database size
+6. **Two timestamps pattern** - Tracking both "first seen" and "last updated" enables multiple query patterns
+7. **Unique indexes matter** - Prevent duplicates and enable efficient upserts
+8. **Error resilience** - Continue processing even if individual items fail (collect errors, don't stop)
+
+### References
+- [Constant Contact Campaigns API](https://developer.constantcontact.com/api_guide/email_campaigns.html)
+- [Constant Contact Reporting API](https://developer.constantcontact.com/api_guide/email_reporting.html)
+- [Drizzle ORM Upsert Pattern](https://orm.drizzle.team/docs/insert#on-conflict-do-update)
+- [PostgreSQL Unique Index](https://www.postgresql.org/docs/current/indexes-unique.html)

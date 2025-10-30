@@ -94,8 +94,31 @@ export async function GET(request: NextRequest) {
 
     const tokens: TokenResponse = await tokenResponse.json();
 
+    console.log('Token exchange successful:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresIn: tokens.expires_in,
+      tokenType: tokens.token_type,
+    });
+
     // Calculate expiration timestamp
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+
+    // Check if we have an existing refresh token to preserve
+    const [existingToken] = await db
+      .select()
+      .from(integrationTokens)
+      .where(eq(integrationTokens.userId, session.user.id))
+      .limit(1);
+
+    // Use new refresh token if provided, otherwise keep existing one
+    const refreshTokenToStore = tokens.refresh_token || existingToken?.refreshToken || null;
+
+    if (!tokens.refresh_token && existingToken?.refreshToken) {
+      console.log('No refresh token in response, preserving existing refresh token');
+    } else if (!tokens.refresh_token) {
+      console.warn('WARNING: No refresh token received and no existing token to preserve!');
+    }
 
     // Store tokens in database (upsert)
     await db
@@ -104,7 +127,7 @@ export async function GET(request: NextRequest) {
         userId: session.user.id,
         provider: 'constant_contact',
         accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        refreshToken: refreshTokenToStore,
         expiresAt,
         scope: tokens.scope || process.env.CC_SCOPES || 'contact_data',
         tokenType: tokens.token_type,
@@ -113,7 +136,7 @@ export async function GET(request: NextRequest) {
         target: integrationTokens.userId,
         set: {
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          refreshToken: refreshTokenToStore,
           expiresAt,
           scope: tokens.scope || process.env.CC_SCOPES || 'contact_data',
           tokenType: tokens.token_type,

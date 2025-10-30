@@ -1,42 +1,61 @@
 # LaederHub
 
-LaederHub is a Next.js application using the App Router with Auth.js v5 (NextAuth) for Google OAuth authentication, Drizzle ORM with Vercel Postgres, Constant Contact OAuth2 integration, and the Vercel AI SDK for AI-powered analytics.
+LaederHub is a subscription SaaS platform that generates AI-powered marketing insights from Constant Contact data, delivered as engaging podcast conversations. Built with Next.js (App Router), Auth.js v5, and Drizzle ORM.
+
+## Product Vision
+
+**The Problem:** Marketing teams use basic Constant Contact analytics (open rates, clicks) but lack actionable insights about what actually works.
+
+**The Solution:** Deep analysis of campaign data surfacing patterns like optimal send times, subject line characteristics that drive opens, and specific recommendations - delivered as a conversational podcast, not boring dashboards.
+
+**Business Model:** Subscription SaaS
+- Users sign up and connect Constant Contact account
+- Pay monthly subscription fee
+- Receive monthly 10-minute podcast with marketing insights
+- Optional: Weekly 5-minute pulse checks
 
 ## What's Inside
-- **Auth System** &mdash; Auth.js v5 with Google OAuth and database sessions using DrizzleAdapter
-- **Database** &mdash; Vercel Postgres (Neon) with Drizzle ORM for schema and migrations
-- **Protected Routes** &mdash; Server-side authentication checks using `auth()` helper
+- **Auth System** &mdash; Auth.js v5 with Google OAuth and database sessions
 - **Constant Contact Integration** &mdash; OAuth2 with automatic token refresh and API access
-- **Future** &mdash; Vercel AI SDK endpoints, enhanced dashboard UI
+- **Campaign Analysis** &mdash; Time-of-day patterns, subject line optimization, engagement trends
+- **Podcast Generation** &mdash; Two-voice conversational format using OpenAI TTS
+- **Background Jobs** &mdash; Inngest for long-running analysis pipeline
+- **Database** &mdash; Vercel Postgres with Drizzle ORM
 
 ## Repository Structure
 ```
 .
 ├── src/
-│   ├── app/            # Next.js App Router pages and API routes
+│   ├── app/                      # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── auth/[...nextauth]/  # Auth.js route handler
-│   │   │   └── cc/                  # Constant Contact OAuth routes
-│   │   │       ├── authorize/       # Initiate OAuth flow
-│   │   │       ├── callback/        # Handle OAuth callback
-│   │   │       └── ping/            # Test API with token refresh
-│   │   └── page.tsx    # Protected home page with integrations
-│   ├── db/             # Database client and schema (Drizzle ORM)
-│   └── auth.ts         # Auth.js v5 configuration
-├── drizzle/            # Database migrations
-├── docs/               # Project documentation
-│   └── devlog.md       # Detailed development log
-├── drizzle.config.ts   # Drizzle Kit configuration
-├── package.json        # Dependencies (pnpm)
-└── tsconfig.json       # TypeScript configuration
+│   │   │   ├── cc/                  # Constant Contact OAuth
+│   │   │   ├── insights/            # Insights generation API (planned)
+│   │   │   └── inngest/             # Inngest webhook (planned)
+│   │   ├── insights/[jobId]/        # Results page (planned)
+│   │   └── page.tsx                 # Home page with integrations
+│   ├── lib/                      # Core logic (planned)
+│   │   ├── constantcontact/      # CC API client
+│   │   ├── analysis/             # Campaign analysis functions
+│   │   └── podcast/              # Podcast script & generation
+│   ├── db/                       # Database (Drizzle ORM)
+│   └── auth.ts                   # Auth.js v5 config
+├── drizzle/                      # Database migrations
+├── docs/                         # Documentation
+│   ├── devlog.md                 # Development log
+│   └── roadmap.md                # Product roadmap (this doc)
+└── package.json                  # Dependencies
 ```
 
 ## Prerequisites
 - Node.js LTS (18+)
 - pnpm (package manager)
-- Vercel account (for Postgres database and deployment)
-- Google Cloud Console project with OAuth2 credentials
-- Constant Contact developer account with OAuth2 app
+- Vercel account (Postgres database and deployment)
+- Google Cloud Console project (OAuth2 credentials)
+- Constant Contact developer account (OAuth2 app)
+- OpenAI API key (podcast generation)
+- Inngest account (background jobs)
+- Email service account - Resend or SendGrid (notifications)
 
 ## Setup
 
@@ -67,7 +86,18 @@ CC_CLIENT_SECRET="<from Constant Contact developer portal>"
 CC_AUTH_BASE="https://authz.constantcontact.com/oauth2/default"
 CC_API_BASE="https://api.cc.email/v3"
 CC_REDIRECT_URI="http://localhost:3000/api/cc/callback"
-CC_SCOPES="contact_data"
+CC_SCOPES="contact_data campaign_data offline_access"
+
+# Insights & Podcast Generation (add when implementing)
+OPENAI_API_KEY="sk-..."
+INNGEST_EVENT_KEY="..."
+INNGEST_SIGNING_KEY="..."
+RESEND_API_KEY="..."  # OR SENDGRID_API_KEY
+
+# Payments (add later)
+# STRIPE_SECRET_KEY="..."
+# STRIPE_WEBHOOK_SECRET="..."
+# NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="..."
 ```
 
 **Google OAuth Setup:**
@@ -83,7 +113,7 @@ CC_SCOPES="contact_data"
 2. Create a new application or select existing
 3. Add redirect URI: `http://localhost:3000/api/cc/callback`
 4. Copy Client ID (API Key) and Client Secret to `.env.local`
-5. Request `contact_data` scope for read access to contacts
+5. Required scopes: `contact_data`, `campaign_data`, `offline_access`
 
 **Pull Vercel Environment Variables (if already deployed):**
 ```bash
@@ -116,17 +146,20 @@ The app runs on [http://localhost:3000](http://localhost:3000)
 ### Constant Contact Integration
 1. Click "Connect" button on home page
 2. Redirected to Constant Contact for authorization
-3. Approve access (scope: `contact_data`)
+3. Approve access (scopes: `contact_data`, `campaign_data`, `offline_access`)
 4. Redirected back to app with authorization code
 5. Code exchanged for access/refresh tokens
 6. Tokens stored in `integration_tokens` table
-7. Status updates to "Connected" with "Test API" button
-8. Tokens automatically refresh when expired
+7. Status updates to "Connected" with green checkmark
+8. Account info displayed (email, name)
+9. Tokens automatically refresh when expired or expiring within 5 minutes
+10. Campaign data can be synced to database via "Sync Campaigns" button
 
 ## Database Schema
 
 Tables managed by Drizzle ORM in [src/db/schema.ts](src/db/schema.ts):
 
+### Current Tables
 - `users` - User profiles from OAuth providers
 - `accounts` - OAuth provider accounts (Google)
 - `sessions` - Active database sessions
@@ -135,6 +168,21 @@ Tables managed by Drizzle ORM in [src/db/schema.ts](src/db/schema.ts):
   - Stores access tokens, refresh tokens, expiration timestamps
   - One row per user (upsert pattern for reconnections)
   - Automatic token refresh on API calls
+- `campaigns` - Cached campaign data for historical analysis ✅
+  - Campaign metadata (name, subject, send time, status)
+  - Performance metrics (sends, opens, clicks, rates)
+  - Tracking timestamps (firstSeenAt, lastUpdatedAt)
+  - Unique index on (userId, ccCampaignId) for efficient upserts
+- `insights_reports` - Generated insights tracking ✅
+  - Report metadata (type: full/weekly/monthly)
+  - Period tracking (start/end dates)
+  - Campaign counts (total analyzed, new since last)
+  - Results (insights JSON, podcast/transcript URLs)
+  - Status tracking (pending/processing/completed/failed)
+
+### Planned Tables
+- `subscriptions` - Payment/billing (Stripe integration, later)
+  - User ID, plan, status, Stripe customer ID
 
 ## Available Scripts
 
@@ -148,14 +196,36 @@ pnpm drizzle:migrate    # Apply migrations to database
 
 ## API Routes
 
+### Authentication
+- **`GET /api/auth/signin`** - Sign in with Google OAuth
+- **`GET /api/auth/signout`** - Sign out and clear session
+- **`GET /api/auth/callback/google`** - OAuth callback handler (Auth.js)
+
 ### Constant Contact Endpoints
 
 - **`GET /api/cc/authorize`** - Initiates OAuth flow with Constant Contact
+  - Generates state for CSRF protection
+  - Redirects to CC authorization endpoint
 - **`GET /api/cc/callback`** - Handles OAuth callback and stores tokens
+  - Validates state parameter
+  - Exchanges authorization code for tokens
+  - Stores/updates tokens in database
 - **`GET /api/cc/ping`** - Tests API access, fetches first 5 contacts
   - Automatically refreshes expired tokens
   - Retries once on 401 errors
   - Returns contact data as JSON
+- **`GET /api/cc/campaigns`** - Fetches all campaigns with stats (test endpoint)
+  - Fetches campaigns from CC API
+  - Filters sent campaigns
+  - Fetches performance stats
+  - Returns JSON response
+- **`GET /api/cc/sync`** - Syncs campaigns to database ✅
+  - Fetches all campaigns and stats from CC API
+  - Upserts to `campaigns` table
+  - Returns sync results (counts, errors)
+- **`DELETE /api/cc/disconnect`** - Disconnects Constant Contact integration
+  - Deletes tokens from database
+  - Requires reconnection to re-authorize
 
 ## Deployment
 
@@ -173,7 +243,7 @@ pnpm drizzle:migrate    # Apply migrations to database
    - `CC_CLIENT_SECRET`
    - `CC_AUTH_BASE`, `CC_API_BASE` (same as local)
    - `CC_REDIRECT_URI` (production: `https://hub.laederdata.com/api/cc/callback`)
-   - `CC_SCOPES` (same as local: `contact_data`)
+   - `CC_SCOPES` (same as local: `contact_data campaign_data offline_access`)
 3. Add production redirect URIs:
    - Google Console: `https://hub.laederdata.com/api/auth/callback/google`
    - Constant Contact: `https://hub.laederdata.com/api/cc/callback`
@@ -194,27 +264,96 @@ pnpm drizzle:migrate
 - **Database**: Vercel Postgres (Neon)
 - **ORM**: Drizzle ORM
 - **Integrations**: Constant Contact OAuth2 API
-- **Styling**: Tailwind CSS (planned)
+- **Background Jobs**: Inngest
+- **AI/TTS**: OpenAI API (podcast generation)
+- **Storage**: Vercel Blob Storage (podcast files)
+- **Email**: Resend or SendGrid (notifications)
+- **Payments**: Stripe (planned)
 - **Deployment**: Vercel
 - **Package Manager**: pnpm
 
-## Features
+## Product Roadmap
+
+### Phase 1: MVP - Core Insights (Current Focus)
+**Goal:** First paying customer generating monthly insights
+
+**Week 1: Data Pipeline ✅**
+- [x] Constant Contact API client (fetch campaigns & stats)
+- [x] Database schema (`campaigns`, `insights_reports` tables)
+- [x] Campaign sync function with upsert logic
+- [x] Automatic token refresh
+- [x] Campaign count display on home page
+- [ ] Time-of-day analysis (best send times)
+- [ ] Subject line analysis (length, numbers, patterns)
+- [ ] Insights aggregation (structured JSON output)
+- [ ] Podcast script generation (two-voice conversation template)
+- [ ] OpenAI TTS integration (audio generation)
+
+**Week 2: Background Jobs & UI**
+- [ ] Inngest setup (long-running jobs)
+- [ ] API routes (`/api/insights/generate`, `/api/insights/status/:id`)
+- [ ] Home page "Generate Insights" button
+- [ ] Results page with audio player & transcript
+- [ ] Email notifications (job complete)
+
+**Week 3: Testing & Deployment**
+- [ ] End-to-end testing with real campaign data
+- [ ] Error handling & edge cases
+- [ ] Production deployment (Vercel)
+- [ ] Documentation updates
+
+### Phase 2: Monetization
+- [ ] Stripe integration (subscription plans)
+- [ ] Checkout flow & payment handling
+- [ ] Billing portal
+- [ ] Gate insights behind subscription
+- [ ] Pricing page
+
+### Phase 3: Recurring Insights
+- [ ] Weekly pulse podcasts (5-min updates)
+- [ ] Inngest cron job (weekly schedule)
+- [ ] Trend analysis (compare to previous periods)
+- [ ] Email all active subscribers
+
+### Phase 4: Enhancement
+- [ ] List segmentation recommendations
+- [ ] Historical tracking & trend visualization
+- [ ] Manual regeneration option
+- [ ] Shareable podcast links
+- [ ] Dashboard improvements
+
+## Current Status
 
 ### Implemented ✅
-- Google OAuth authentication with database sessions
-- Constant Contact OAuth2 integration with token management
-- Automatic token refresh with expiry detection
-- Protected server-side routes
-- Integration status dashboard
-- API testing endpoint
+- **Authentication**
+  - Google OAuth with Auth.js v5 and database sessions
+  - Protected server-side routes
+- **Constant Contact Integration**
+  - OAuth2 flow with state validation (CSRF protection)
+  - Token management with automatic refresh (5-min expiry window)
+  - Disconnect/reconnect functionality
+  - Account info display (email, name)
+- **Campaign Data Pipeline**
+  - API client with pagination and rate limiting
+  - Database schema for campaigns and insights reports
+  - Campaign sync function with upsert logic
+  - `/api/cc/sync` endpoint for manual syncing
+  - Campaign count display on home page
 
-### Planned 🚧
-- Vercel AI SDK integration
-- Enhanced UI/dashboard
-- Additional Constant Contact endpoints (campaigns, lists)
-- Contact data analytics
-- Real-time data sync
+### In Progress 🔨
+- Waiting for real campaign data to test pipeline
+- Analysis pipeline architecture (time-of-day, subject lines)
+- Podcast generation pipeline
 
-## Next Steps
+### Planned 📋
+- Background job orchestration (Inngest)
+- Insights generation and analysis
+- Results UI with audio player
+- Email notifications
+- Stripe payments
+- Weekly pulse updates
 
-See [docs/devlog.md](docs/devlog.md) for detailed development progress and [tasks_mvp.md](tasks_mvp.md) for upcoming work.
+## Documentation
+
+- [Development Log](docs/devlog.md) - Detailed development history
+- [Product Roadmap](docs/roadmap.md) - Full implementation plan (planned)

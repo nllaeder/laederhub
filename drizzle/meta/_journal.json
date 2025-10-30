@@ -8,6 +8,13 @@
       "when": 1761570880767,
       "tag": "0000_motionless_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761833866276,
+      "tag": "0001_dear_amphibian",
+      "breakpoints": true
     }
   ]
 }
